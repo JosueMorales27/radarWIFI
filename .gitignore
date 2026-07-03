@@ -13,6 +13,9 @@ _test_*.py
 data/radarwifi.db
 data/*.db
 
+# Logs de arranque / temporales
+*.log
+
 # Capturas de handshake (nunca subir capturas de red)
 *.cap
 *.pcap

@@ -1,50 +1,33 @@
 @echo off
 REM ==========================================================
-REM  radarWIFI - launcher click-ready
-REM  Arranca el servidor local y abre el radar en el navegador.
-REM  >>> NO CIERRES ESTA VENTANA <<<  (si la cierras, se apaga)
+REM  radarWIFI PRO - launcher click-ready (SIN consola negra)
+REM  Arranca el server en segundo plano (pythonw) y abre el
+REM  navegador solo. No deja ventana colgada.
+REM  Para APAGARLO: doble click en "Apagar radarWIFI.bat".
 REM ==========================================================
-title radarWIFI  --  NO CERRAR (esto mantiene el radar prendido)
 cd /d "%~dp0"
 
 REM Genera el icono la primera vez (si Pillow esta instalado)
-if not exist "radar.ico" (
-    python make_icon.py >nul 2>&1
-)
+if not exist "radar.ico" ( python make_icon.py >nul 2>&1 )
 
-REM Elige el interprete de Python disponible
-set "PY="
-python --version >nul 2>&1 && set "PY=python"
-if not defined PY ( py --version >nul 2>&1 && set "PY=py" )
+REM Interprete SIN consola: pythonw (preferido) -> pyw -> python /min
+set "PYW="
+where pythonw >nul 2>&1 && set "PYW=pythonw"
+if not defined PYW ( where pyw >nul 2>&1 && set "PYW=pyw" )
 
-if not defined PY (
-    echo.
-    echo   [X] No se encontro Python en este equipo.
-    echo       Instalalo desde https://python.org  (marca "Add to PATH").
-    echo.
-    pause
-    exit /b 1
-)
-
-echo.
-echo   ================================================
-echo     radarWIFI PRO  //  NeoKali WiFi Analyzer (local)
-echo   ================================================
-echo     Servidor:  http://127.0.0.1:8777
-echo     El navegador se abre solo en unos segundos.
-echo.
-echo     ^>^>^> DEJA ESTA VENTANA ABIERTA ^<^<^<
-echo     (cerrarla apaga el radar)
-echo   ================================================
-echo.
-
-REM El .bat abre el navegador solo (espera 3s a que el server levante).
-REM Marca NOOPEN para que server.py no abra otra pestana (evita duplicados).
+REM NOOPEN: el navegador lo abre este .bat, no Python (evita pestana doble)
 set "RADARWIFI_NOOPEN=1"
-start "" /min cmd /c "timeout /t 3 /nobreak >nul & start "" http://127.0.0.1:8777/"
 
-%PY% server.py
+if defined PYW (
+    start "" %PYW% server.py
+) else (
+    REM sin pythonw: consola minimizada para que no estorbe
+    start "radarWIFI server (no cerrar)" /min python server.py
+)
 
-echo.
-echo   El servidor se detuvo. Presiona una tecla para salir.
-pause >nul
+REM Espera 2s a que el server levante y abre el navegador por defecto
+timeout /t 2 /nobreak >nul
+start "" "http://127.0.0.1:8777/"
+
+REM El .bat termina aqui: el server sigue vivo en segundo plano.
+exit /b 0
