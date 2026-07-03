@@ -36,6 +36,10 @@
   #mode{padding:3px 10px;border:1px solid var(--grn);border-radius:3px}
   #mode.sim{color:var(--amber);border-color:var(--amber);text-shadow:0 0 6px #ffcf3f88}
   #mode.live{color:var(--grn)}
+  .nav a{color:var(--grn-dim);text-decoration:none;border:1px solid #0a3d22;
+    padding:5px 12px;border-radius:4px;letter-spacing:1px;font-size:12px;transition:.15s}
+  .nav a:hover{color:#000;background:var(--grn);border-color:var(--grn)}
+  .nav a.here{color:var(--grn);border-color:var(--grn)}
 
   /* --- panel derecho --- */
   #panel{background:var(--panel);border-left:1px solid #0a3d22;
@@ -91,7 +95,13 @@
     <div class="vignette"></div>
     <div id="topbar">
       <div id="brand">radar<b>WIFI</b></div>
-      <div id="mode" class="sim">-- INICIANDO --</div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="nav">
+          <a href="/" class="here">RADAR</a>
+          <a href="/sensing">SENSING</a>
+        </span>
+        <div id="mode" class="sim">-- INICIANDO --</div>
+      </div>
     </div>
     <div id="detail"></div>
   </div>

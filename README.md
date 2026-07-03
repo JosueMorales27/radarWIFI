@@ -37,6 +37,29 @@ python make_icon.py   # genera radar.ico
 # luego crea un acceso directo a radarWIFI.bat con radar.ico como icono
 ```
 
+## 🧠 Modo SENSING (RuView)
+
+Además del radar, hay una segunda vista (**botón `SENSING`** arriba) que recrea lo que
+hace el repo [RuView](https://github.com/ruvnet/ruview): **WiFi sensing** — detectar
+personas, su postura (esqueleto de 17 puntos), signos vitales (pulso y respiración),
+conteo de personas y caídas, **sin cámara**, usando las perturbaciones de la señal WiFi.
+
+> ⚠️ **MODO SIMULADO.** El sensing real necesita placas **ESP32 con captura de CSI**
+> (Channel State Information). Sin ese hardware, el propio repo oficial de RuView corre
+> en modo *mock* (`MOCK_HARDWARE=true`) con datos simulados — esto hace exactamente lo
+> mismo. El día que conectes ESP32-CSI, se sustituye `sensing_frame()` en `server.py`
+> por la lectura real y la interfaz (esqueletos, vitales, mapa) sigue igual.
+
+## 🛡️ Nota de seguridad sobre RuView
+
+Se auditó el repo `ruvnet/ruview` antes de recrear su funcionalidad. Resumen:
+- ✅ Sin telemetría ni envío de datos a terceros; DB/Redis apuntan a `localhost`; MIT.
+- ⚠️ Su `example.env` trae defaults inseguros (`HOST=0.0.0.0`, `CORS_ORIGINS=*`,
+  `ENABLE_AUTHENTICATION=false`) — expondría el server a toda la LAN. **Esta recreación
+  escucha solo en `127.0.0.1`** para evitarlo.
+- 🧱 Su `install.sh` es para Linux y su core necesita ESP32 → por eso se recreó local
+  en vez de instalar el stack completo (Rust + PyTorch + Postgres + Redis + Docker).
+
 ## 🧩 Cómo funciona (arquitectura)
 
 ```

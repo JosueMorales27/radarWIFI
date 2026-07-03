@@ -15,6 +15,8 @@ import json
 import re
 import os
 import sys
+import math
+import time
 import random
 import webbrowser
 import threading
@@ -189,6 +191,91 @@ def scan_sim():
 
 
 # ----------------------------------------------------------------------
+#  Modo SENSING (RuView) - replica lo que hace el repo ruvnet/ruview
+#  usando CSI de placas ESP32. SIN ese hardware, el repo oficial corre
+#  en modo MOCK (MOCK_HARDWARE=true) con datos simulados. Aqui hacemos
+#  lo mismo: presencia, esqueleto 17 puntos, vitales, caidas -> SIMULADO.
+#  El dia que conectes ESP32-CSI, se sustituye esta funcion por la lectura
+#  real y todo lo demas (UI, esqueletos, vitales) sigue igual.
+# ----------------------------------------------------------------------
+def has_csi_hardware() -> bool:
+    # No hay soporte de CSI en Windows/netsh. Reservado para futuro ESP32.
+    return False
+
+
+# 17 keypoints estilo COCO (cabeza -> pies) en coords normalizadas [-1..1]
+# relativas al centro de la persona. Postura "de pie" base.
+_POSE_BASE = [
+    (0.00, -0.90),  # 0 nariz
+    (-0.04, -0.94), (0.04, -0.94),      # 1,2 ojos
+    (-0.08, -0.92), (0.08, -0.92),      # 3,4 orejas
+    (-0.18, -0.62), (0.18, -0.62),      # 5,6 hombros
+    (-0.26, -0.30), (0.26, -0.30),      # 7,8 codos
+    (-0.30, 0.02), (0.30, 0.02),        # 9,10 munecas
+    (-0.12, -0.02), (0.12, -0.02),      # 11,12 caderas
+    (-0.14, 0.44), (0.14, 0.44),        # 13,14 rodillas
+    (-0.15, 0.88), (0.15, 0.88),        # 15,16 tobillos
+]
+
+_ACTIVITIES = ["de pie", "caminando", "sentado", "quieto"]
+
+
+def sensing_frame():
+    """Genera un frame simulado coherente en el tiempo (usa time.time())."""
+    t = time.time()
+    live = has_csi_hardware()
+
+    # cuantas personas "hay" (varia lento)
+    n = 1 + int((math.sin(t * 0.07) + 1))  # 1..2 personas, cambia lento
+    persons = []
+    for i in range(n):
+        ph = i * 2.3
+        # posicion en el cuarto [0..1] con deriva lenta (no teletransporta)
+        px = 0.5 + 0.28 * math.sin(t * 0.15 + ph)
+        py = 0.5 + 0.22 * math.cos(t * 0.11 + ph * 1.7)
+        moving = abs(math.sin(t * 0.15 + ph)) > 0.35
+        act = "caminando" if moving else _ACTIVITIES[(i + int(t * 0.05)) % len(_ACTIVITIES)]
+
+        # vitales realistas con variabilidad (respiracion ~12-18, pulso ~62-88)
+        breathing = round(15 + 3 * math.sin(t * 0.9 + ph), 1)
+        heart = round(74 + 10 * math.sin(t * 0.5 + ph) + 2 * math.sin(t * 3 + ph), 0)
+
+        # esqueleto: base + micro-movimiento (respira, se balancea)
+        sway = 0.03 * math.sin(t * 1.3 + ph)
+        breathe = 0.015 * math.sin(t * (breathing / 60.0) * 2 * math.pi)
+        kp = []
+        for (kx, ky) in _POSE_BASE:
+            jitter = 0.01 * math.sin(t * 2 + kx * 7 + ph)
+            kp.append([round(kx + sway + jitter, 3), round(ky - breathe, 3)])
+
+        persons.append({
+            "id": i + 1,
+            "x": round(px, 3),
+            "y": round(py, 3),
+            "activity": act,
+            "moving": moving,
+            "heart_rate": int(heart),
+            "breathing_rate": breathing,
+            "keypoints": kp,
+            "confidence": round(0.72 + 0.2 * abs(math.sin(t + ph)), 2),
+        })
+
+    # caida: evento raro (ventana corta cada ~90s)
+    fall = (int(t) % 90) < 2 and n > 0
+    motion = int(min(100, sum(60 if p["moving"] else 15 for p in persons)))
+
+    return {
+        "mode": "EN VIVO" if live else "SIMULADO",
+        "hardware": live,
+        "presence": n > 0,
+        "person_count": n,
+        "motion_level": motion,
+        "fall_detected": bool(fall),
+        "persons": persons,
+    }
+
+
+# ----------------------------------------------------------------------
 #  HTTP handler
 # ----------------------------------------------------------------------
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -210,6 +297,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             fp = os.path.join(HERE, "index.html")
             with open(fp, "rb") as f:
                 self._send(200, f.read(), "text/html; charset=utf-8")
+            return
+        if path in ("/sensing", "/sensing.html"):
+            fp = os.path.join(HERE, "sensing.html")
+            with open(fp, "rb") as f:
+                self._send(200, f.read(), "text/html; charset=utf-8")
+            return
+        if path == "/api/sensing":
+            self._send(200, json.dumps(sensing_frame()))
             return
         if path == "/api/scan":
             live = has_wifi_adapter()

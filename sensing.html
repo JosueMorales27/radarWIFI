@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>radarWIFI // sensing</title>
+<style>
+  :root{
+    --grn:#00ff5f; --grn-dim:#0a7d3a; --grn-glow:#00ff5f88;
+    --red:#ff2b47; --amber:#ffcf3f; --cyan:#3fe0ff;
+    --bg:#020604; --panel:#04120a; --font:"Consolas","Courier New",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--grn);
+    font-family:var(--font);overflow:hidden;user-select:none}
+  #app{display:grid;grid-template-columns:1fr 380px;height:100vh}
+
+  #stage{position:relative;overflow:hidden;display:flex;flex-direction:column}
+  canvas#pose{flex:1;width:100%}
+  .scanlines{position:absolute;inset:0;z-index:3;pointer-events:none;
+    background:repeating-linear-gradient(0deg,#0000 0 2px,#00ff5f0a 2px 3px);mix-blend-mode:screen}
+  .vignette{position:absolute;inset:0;z-index:3;pointer-events:none;
+    background:radial-gradient(circle at 50% 45%,#0000 55%,#000b 100%)}
+
+  #topbar{position:absolute;top:0;left:0;right:0;z-index:4;display:flex;
+    justify-content:space-between;align-items:center;padding:12px 20px;
+    font-size:13px;letter-spacing:2px;text-shadow:0 0 6px var(--grn-glow)}
+  #brand{font-size:20px;font-weight:bold}#brand b{color:#fff}
+  .nav a{color:var(--grn-dim);text-decoration:none;border:1px solid #0a3d22;
+    padding:5px 12px;border-radius:4px;letter-spacing:1px;font-size:12px;transition:.15s}
+  .nav a:hover{color:#000;background:var(--grn);border-color:var(--grn)}
+  .nav a.here{color:var(--grn);border-color:var(--grn)}
+
+  #simbanner{position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:5;
+    background:#1a1400cc;border:1px solid var(--amber);color:var(--amber);
+    padding:5px 16px;border-radius:20px;font-size:11px;letter-spacing:1px;
+    text-shadow:0 0 6px #ffcf3f88;white-space:nowrap}
+  #simbanner.live{border-color:var(--grn);color:var(--grn);background:#031a0dcc}
+
+  #fall{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9;
+    display:none;background:#2a0008ee;border:2px solid var(--red);color:var(--red);
+    padding:22px 40px;border-radius:8px;font-size:26px;font-weight:bold;letter-spacing:3px;
+    text-shadow:0 0 12px var(--red);box-shadow:0 0 40px #ff2b4788;animation:blink .5s infinite}
+  #fall.show{display:block}
+  @keyframes blink{50%{opacity:.4}}
+
+  /* mini mapa del cuarto */
+  #roommap{position:absolute;bottom:14px;left:14px;z-index:4;
+    border:1px solid #0a3d22;border-radius:6px;background:#010a05cc;padding:8px}
+  #roommap .t{font-size:9px;color:var(--grn-dim);letter-spacing:2px;margin-bottom:4px}
+
+  #panel{background:var(--panel);border-left:1px solid #0a3d22;display:flex;
+    flex-direction:column;padding:16px;gap:12px;z-index:5;overflow-y:auto}
+  #panel::-webkit-scrollbar{width:6px}#panel::-webkit-scrollbar-thumb{background:#0a3d22;border-radius:3px}
+  .ttl{font-size:12px;letter-spacing:3px;color:var(--grn-dim);border-bottom:1px solid #0a3d22;padding-bottom:6px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:#020e07;border:1px solid #0a3d22;border-radius:4px;padding:8px 10px}
+  .stat .n{font-size:24px;font-weight:bold;text-shadow:0 0 8px var(--grn-glow)}
+  .stat .l{font-size:10px;color:var(--grn-dim);letter-spacing:1px}
+  .presence{padding:10px;border-radius:5px;text-align:center;font-size:18px;
+    font-weight:bold;letter-spacing:3px;border:1px solid}
+  .presence.on{color:var(--grn);border-color:var(--grn);background:#031a0d;text-shadow:0 0 8px var(--grn-glow)}
+  .presence.off{color:var(--grn-dim);border-color:#0a3d22}
+
+  .bar{height:10px;background:#020e07;border:1px solid #0a3d22;border-radius:5px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--grn-dim),var(--grn));
+    box-shadow:0 0 8px var(--grn-glow);transition:width .3s}
+
+  .card{background:#020e07;border:1px solid #0a3d22;border-left:3px solid var(--cyan);
+    border-radius:5px;padding:10px}
+  .card h4{font-size:13px;color:#dfffe9;margin-bottom:2px}
+  .card .act{font-size:11px;color:var(--grn-dim);margin-bottom:8px}
+  .vital{display:flex;align-items:center;gap:8px;margin:4px 0}
+  .vital canvas{background:#010a05;border-radius:3px;flex:1;height:34px}
+  .vital .val{width:74px;text-align:right;font-size:15px;font-weight:bold}
+  .vital .val.hr{color:var(--red);text-shadow:0 0 6px #ff2b4788}
+  .vital .val.br{color:var(--cyan);text-shadow:0 0 6px #3fe0ff88}
+  .vital .val small{font-size:9px;color:var(--grn-dim);display:block;letter-spacing:1px}
+  #foot{font-size:10px;color:var(--grn-dim);text-align:center;letter-spacing:1px;margin-top:auto}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="pose"></canvas>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div id="topbar">
+      <div id="brand">radar<b>WIFI</b></div>
+      <div class="nav">
+        <a href="/">RADAR</a>
+        <a href="/sensing" class="here">SENSING</a>
+      </div>
+    </div>
+    <div id="simbanner">◆ MODO SIMULADO — requiere ESP32 CSI para datos reales</div>
+    <div id="fall">⚠ CAÍDA DETECTADA ⚠</div>
+    <div id="roommap"><div class="t">// MAPA DEL CUARTO</div><canvas id="map" width="150" height="120"></canvas></div>
+  </div>
+
+  <div id="panel">
+    <div class="ttl">// PRESENCIA</div>
+    <div id="presence" class="presence off">SIN PRESENCIA</div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="s-persons">0</div><div class="l">PERSONAS</div></div>
+      <div class="stat"><div class="n" id="s-motion">0%</div><div class="l">MOVIMIENTO</div></div>
+    </div>
+    <div class="bar"><i id="motionbar" style="width:0%"></i></div>
+    <div class="ttl">// SIGNOS VITALES</div>
+    <div id="cards"></div>
+    <div id="foot">100% LOCAL · SIN CÁMARA · WiFi SENSING</div>
+  </div>
+</div>
+
+<script>
+const poseCv = document.getElementById('pose');
+const pctx = poseCv.getContext('2d');
+const mapCv = document.getElementById('map');
+const mctx = mapCv.getContext('2d');
+
+// aristas del esqueleto COCO-17
+const EDGES = [
+  [0,1],[0,2],[1,3],[2,4],        // cara
+  [5,6],[5,7],[7,9],[6,8],[8,10], // brazos + hombros
+  [5,11],[6,12],[11,12],          // torso
+  [11,13],[13,15],[12,14],[14,16] // piernas
+];
+
+let frame = null;         // ultimo frame del backend
+let drawn = {};           // keypoints suavizados por persona id
+let t0 = performance.now();
+
+function resize(){
+  poseCv.width = poseCv.clientWidth * devicePixelRatio;
+  poseCv.height = poseCv.clientHeight * devicePixelRatio;
+}
+window.addEventListener('resize', resize);
+
+async function poll(){
+  try{
+    const r = await fetch('/api/sensing');
+    frame = await r.json();
+    updatePanel();
+  }catch(e){}
+}
+
+function updatePanel(){
+  if(!frame) return;
+  const live = frame.hardware;
+  const banner = document.getElementById('simbanner');
+  if(live){ banner.className='live'; banner.textContent='● EN VIVO — ESP32 CSI activo'; }
+
+  const pres = document.getElementById('presence');
+  if(frame.presence){ pres.className='presence on'; pres.textContent='● PRESENCIA DETECTADA'; }
+  else { pres.className='presence off'; pres.textContent='SIN PRESENCIA'; }
+
+  document.getElementById('s-persons').textContent = frame.person_count;
+  document.getElementById('s-motion').textContent = frame.motion_level + '%';
+  document.getElementById('motionbar').style.width = frame.motion_level + '%';
+  document.getElementById('fall').className = frame.fall_detected ? 'show' : '';
+
+  // tarjetas de vitales (una por persona) — reusa canvases existentes
+  const cards = document.getElementById('cards');
+  const ids = frame.persons.map(p=>'card'+p.id);
+  // crea las que falten
+  for(const p of frame.persons){
+    if(!document.getElementById('card'+p.id)){
+      const el = document.createElement('div');
+      el.className='card'; el.id='card'+p.id;
+      el.innerHTML = `<h4>Persona ${p.id}</h4><div class="act" id="act${p.id}"></div>
+        <div class="vital"><canvas id="ecg${p.id}" width="200" height="34"></canvas>
+          <div class="val hr"><span id="hr${p.id}">--</span><small>PULSO bpm</small></div></div>
+        <div class="vital"><canvas id="brc${p.id}" width="200" height="34"></canvas>
+          <div class="val br"><span id="br${p.id}">--</span><small>RESP rpm</small></div></div>`;
+      cards.appendChild(el);
+    }
+  }
+  // borra tarjetas de personas que ya no estan
+  [...cards.children].forEach(c=>{ if(!ids.includes(c.id)) c.remove(); });
+
+  for(const p of frame.persons){
+    document.getElementById('act'+p.id).textContent =
+      `${p.activity} · confianza ${(p.confidence*100)|0}%`;
+    document.getElementById('hr'+p.id).textContent = p.heart_rate;
+    document.getElementById('br'+p.id).textContent = p.breathing_rate;
+  }
+}
+
+// ---- animacion de esqueletos ----
+function drawPose(){
+  requestAnimationFrame(drawPose);
+  const W=poseCv.width, H=poseCv.height;
+  pctx.clearRect(0,0,W,H);
+  // piso
+  pctx.strokeStyle='#0a3d2255'; pctx.lineWidth=1;
+  for(let y=H*0.55; y<H; y+=H*0.06){ pctx.beginPath(); pctx.moveTo(0,y); pctx.lineTo(W,y); pctx.stroke(); }
+
+  if(!frame || !frame.persons.length) return;
+  const persons = frame.persons;
+  const slotW = W / persons.length;
+  const t = (performance.now()-t0)/1000;
+
+  persons.forEach((p, idx)=>{
+    // suavizado hacia los keypoints objetivo
+    const key = p.id;
+    if(!drawn[key]) drawn[key] = p.keypoints.map(k=>[...k]);
+    const cur = drawn[key];
+    for(let i=0;i<p.keypoints.length;i++){
+      cur[i][0] += (p.keypoints[i][0]-cur[i][0])*0.25;
+      cur[i][1] += (p.keypoints[i][1]-cur[i][1])*0.25;
+    }
+
+    const cx = slotW*(idx+0.5);
+    const cy = H*0.5;
+    const scale = Math.min(slotW*0.32, H*0.34);
+    const P = cur.map(k=>[cx + k[0]*scale, cy + k[1]*scale]);
+
+    const col = p.moving ? '0,255,95' : '63,224,255';
+    // huesos
+    pctx.strokeStyle=`rgb(${col})`; pctx.lineWidth=3;
+    pctx.shadowColor=`rgb(${col})`; pctx.shadowBlur=10;
+    for(const [a,b] of EDGES){
+      pctx.beginPath(); pctx.moveTo(P[a][0],P[a][1]); pctx.lineTo(P[b][0],P[b][1]); pctx.stroke();
+    }
+    // articulaciones
+    pctx.shadowBlur=6;
+    for(const [x,y] of P){ pctx.fillStyle=`rgb(${col})`; pctx.beginPath(); pctx.arc(x,y,4,0,7); pctx.fill(); }
+    pctx.shadowBlur=0;
+    // etiqueta
+    pctx.fillStyle=`rgb(${col})`; pctx.font=`${14*devicePixelRatio}px Consolas`;
+    pctx.textAlign='center';
+    pctx.fillText(`P${p.id} · ${p.activity}`, cx, cy+scale*1.15);
+  });
+}
+
+// ---- mini mapa top-down ----
+function drawMap(){
+  requestAnimationFrame(drawMap);
+  const W=mapCv.width,H=mapCv.height;
+  mctx.clearRect(0,0,W,H);
+  mctx.strokeStyle='#0a7d3a'; mctx.lineWidth=1;
+  mctx.strokeRect(4,4,W-8,H-8);
+  if(!frame) return;
+  for(const p of frame.persons){
+    const x=4+p.x*(W-8), y=4+p.y*(H-8);
+    const col = p.moving?'0,255,95':'63,224,255';
+    mctx.fillStyle=`rgba(${col},0.25)`; mctx.beginPath(); mctx.arc(x,y,9,0,7); mctx.fill();
+    mctx.fillStyle=`rgb(${col})`; mctx.beginPath(); mctx.arc(x,y,4,0,7); mctx.fill();
+    mctx.fillStyle='#dfffe9'; mctx.font='9px Consolas'; mctx.fillText(p.id, x+6, y-6);
+  }
+}
+
+// ---- waveforms de vitales ----
+function drawVitals(){
+  requestAnimationFrame(drawVitals);
+  if(!frame) return;
+  const t=(performance.now()-t0)/1000;
+  for(const p of frame.persons){
+    drawECG(document.getElementById('ecg'+p.id), p.heart_rate, t);
+    drawBreath(document.getElementById('brc'+p.id), p.breathing_rate, t);
+  }
+}
+function drawECG(cv,bpm,t){
+  if(!cv) return; const c=cv.getContext('2d'),W=cv.width,H=cv.height;
+  c.clearRect(0,0,W,H); c.strokeStyle='#ff2b47'; c.lineWidth=1.5;
+  c.shadowColor='#ff2b47'; c.shadowBlur=6; c.beginPath();
+  const beat=bpm/60; // beats/seg
+  for(let x=0;x<W;x++){
+    const ph=((x/W*3 - t*beat)%1+1)%1; // fase del latido, scrollea
+    let y=H/2;
+    if(ph>0.46&&ph<0.5) y=H/2-(ph-0.46)/0.04*H*0.42;      // subida R
+    else if(ph>=0.5&&ph<0.54) y=H/2+ (ph-0.5)/0.04*H*0.30; // bajada S
+    else if(ph>0.40&&ph<=0.46) y=H/2+H*0.06;               // Q
+    x?c.lineTo(x,y):c.moveTo(x,y);
+  }
+  c.stroke(); c.shadowBlur=0;
+}
+function drawBreath(cv,rpm,t){
+  if(!cv) return; const c=cv.getContext('2d'),W=cv.width,H=cv.height;
+  c.clearRect(0,0,W,H); c.strokeStyle='#3fe0ff'; c.lineWidth=1.5;
+  c.shadowColor='#3fe0ff'; c.shadowBlur=6; c.beginPath();
+  const f=rpm/60;
+  for(let x=0;x<W;x++){
+    const y=H/2 - Math.sin((x/W*2 - t*f)*Math.PI*2)*H*0.32;
+    x?c.lineTo(x,y):c.moveTo(x,y);
+  }
+  c.stroke(); c.shadowBlur=0;
+}
+
+resize();
+poll(); setInterval(poll, 250);
+drawPose(); drawMap(); drawVitals();
+</script>
+</body>
+</html>
