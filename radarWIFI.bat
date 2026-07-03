@@ -28,7 +28,7 @@ if not defined PY (
 
 echo.
 echo   ================================================
-echo     radarWIFI  //  radar de redes 100%% local
+echo     radarWIFI PRO  //  NeoKali WiFi Analyzer (local)
 echo   ================================================
 echo     Servidor:  http://127.0.0.1:8777
 echo     El navegador se abre solo en unos segundos.
@@ -37,6 +37,11 @@ echo     ^>^>^> DEJA ESTA VENTANA ABIERTA ^<^<^<
 echo     (cerrarla apaga el radar)
 echo   ================================================
 echo.
+
+REM El .bat abre el navegador solo (espera 3s a que el server levante).
+REM Marca NOOPEN para que server.py no abra otra pestana (evita duplicados).
+set "RADARWIFI_NOOPEN=1"
+start "" /min cmd /c "timeout /t 3 /nobreak >nul & start "" http://127.0.0.1:8777/"
 
 %PY% server.py
 

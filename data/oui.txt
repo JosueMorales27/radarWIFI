@@ -1,0 +1,9 @@
+# Prefijos OUI extra para radarWIFI PRO (opcional).
+# Formato:  AABBCC=Nombre del fabricante   (3 primeros octetos de la MAC)
+# Se combinan con la tabla que ya trae core/oui.py. Pega aqui mas lineas si
+# quieres reconocer mas fabricantes. Puedes bajar la lista completa de la IEEE:
+#   https://standards-oui.ieee.org/oui/oui.txt  (luego conviertela a este formato)
+#
+# Ejemplos:
+# F0F61C=Apple
+# 001A11=Google

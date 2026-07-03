@@ -9,6 +9,14 @@ _test_*.py
 # Artefactos generados (se regeneran con make_icon.py)
 # radar.ico y radar.png SI se suben para que el icono venga listo.
 
+# Historial local (se crea solo, no subir)
+data/radarwifi.db
+data/*.db
+
+# Capturas de handshake (nunca subir capturas de red)
+*.cap
+*.pcap
+
 # Sistema
 Thumbs.db
 desktop.ini

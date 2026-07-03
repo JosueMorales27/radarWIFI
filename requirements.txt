@@ -1,0 +1,19 @@
+# radarWIFI PRO - dependencias OPCIONALES
+# ---------------------------------------------------------------
+# El nucleo corre con SOLO la stdlib de Python (sin instalar nada).
+# Estos paquetes solo agregan capacidades EXTRA:
+#
+#   scapy   -> escaneo/deauth por paquetes en Linux (modo monitor)
+#   Pillow  -> generar el icono radar.ico (make_icon.py) en Windows
+#
+# Instalar (opcional):
+#   pip install -r requirements.txt
+#
+# Herramientas del SISTEMA (no son pip, se instalan aparte):
+#   nmap        -> Windows: https://nmap.org/download · Linux: apt install nmap
+#   aircrack-ng -> solo Linux (airmon-ng, airodump-ng, aireplay-ng)
+#   iw / nmcli  -> solo Linux (normalmente ya vienen)
+#   wireshark   -> analizar capturas (.pcap/.cap)
+
+scapy>=2.5.0 ; sys_platform == "linux"
+Pillow>=9.0.0 ; sys_platform == "win32"
