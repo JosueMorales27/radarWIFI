@@ -6,9 +6,22 @@ La app es la misma en todos lados; lo que cambia son las CAPACIDADES.
 En Windows tienes recon (netsh + nmap). En Linux, ademas, se desbloquean
 modo monitor, deauth y captura de handshakes (si tienes las herramientas).
 """
+import os
 import sys
 import shutil
 import platform
+
+_WIN_NMAP_PATHS = [
+    r"C:\Program Files (x86)\Nmap\nmap.exe",
+    r"C:\Program Files\Nmap\nmap.exe",
+]
+
+
+def has_nmap() -> bool:
+    """nmap en el PATH o en su ruta de instalacion tipica de Windows."""
+    if shutil.which("nmap"):
+        return True
+    return any(os.path.exists(p) for p in _WIN_NMAP_PATHS)
 
 
 def os_name() -> str:
@@ -55,7 +68,7 @@ def capabilities() -> dict:
         "root": is_root(),
         # recon (cross-platform)
         "wifi_scan": True,           # siempre: netsh / nmcli / iwlist / scapy / sim
-        "nmap": has_tool("nmap"),
+        "nmap": has_nmap(),
         "scapy": _has_scapy(),
         "wireshark_cli": has_tool("tshark") or has_tool("dumpcap"),
         # activos (por defecto apagados; solo Linux los enciende)

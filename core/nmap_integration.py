@@ -12,11 +12,29 @@ Perfiles pensados para APRENDER (que es justo lo que quieres):
     full    -> 1000 puertos + version de servicios               -sV -T4
     deep    -> version + deteccion de SO (necesita root/admin)   -sV -O -A
 """
+import os
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 
 from . import platform_detect as plat
+
+# rutas comunes de nmap en Windows (por si aun no esta en el PATH tras instalar)
+_WIN_NMAP_PATHS = [
+    r"C:\Program Files (x86)\Nmap\nmap.exe",
+    r"C:\Program Files\Nmap\nmap.exe",
+]
+
+
+def _nmap_bin():
+    """Ruta al binario de nmap: primero el PATH, luego rutas conocidas de Windows."""
+    p = shutil.which("nmap")
+    if p:
+        return p
+    for c in _WIN_NMAP_PATHS:
+        if os.path.exists(c):
+            return c
+    return None
 
 PROFILES = {
     "ping":  {"args": ["-sn"],                 "desc": "Descubrir hosts vivos (ARP/ping, sin puertos)"},
@@ -27,7 +45,7 @@ PROFILES = {
 
 
 def available() -> bool:
-    return shutil.which("nmap") is not None
+    return _nmap_bin() is not None
 
 
 def _parse_xml(xml_text: str) -> list:
@@ -96,7 +114,7 @@ def scan(target: str, profile: str = "quick", timeout: int = 300) -> dict:
         prof = PROFILES["full"]
         profile = "full (degradado: 'deep' necesita sudo)"
 
-    cmd = ["nmap"] + prof["args"] + ["-oX", "-", target]
+    cmd = [_nmap_bin()] + prof["args"] + ["-oX", "-", target]
     try:
         out = subprocess.run(cmd, capture_output=True, timeout=timeout)
         xml_text = out.stdout.decode("utf-8", errors="replace")
