@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>radarWIFI // local</title>
+<style>
+  :root{
+    --grn:#00ff5f; --grn-dim:#0a7d3a; --grn-glow:#00ff5f88;
+    --red:#ff2b47; --amber:#ffcf3f; --bg:#020604; --panel:#04120a;
+    --font:"Consolas","Courier New",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--grn);
+    font-family:var(--font);overflow:hidden;user-select:none}
+  #app{display:grid;grid-template-columns:1fr 360px;height:100vh}
+
+  /* --- lado radar --- */
+  #stage{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  #cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+    opacity:0;filter:grayscale(1) brightness(.35) contrast(1.2) hue-rotate(60deg);
+    transition:opacity .6s}
+  #cam.on{opacity:.5}
+  canvas#radar{position:relative;z-index:2;filter:drop-shadow(0 0 12px var(--grn-glow))}
+  .scanlines{position:absolute;inset:0;z-index:3;pointer-events:none;
+    background:repeating-linear-gradient(0deg,#0000 0 2px,#00ff5f0a 2px 3px);
+    mix-blend-mode:screen}
+  .vignette{position:absolute;inset:0;z-index:3;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%,#0000 55%,#000a 100%)}
+
+  #topbar{position:absolute;top:0;left:0;right:0;z-index:4;display:flex;
+    justify-content:space-between;align-items:center;padding:14px 20px;
+    font-size:13px;letter-spacing:2px;text-shadow:0 0 6px var(--grn-glow)}
+  #brand{font-size:20px;font-weight:bold}
+  #brand b{color:#fff}
+  #mode{padding:3px 10px;border:1px solid var(--grn);border-radius:3px}
+  #mode.sim{color:var(--amber);border-color:var(--amber);text-shadow:0 0 6px #ffcf3f88}
+  #mode.live{color:var(--grn)}
+
+  /* --- panel derecho --- */
+  #panel{background:var(--panel);border-left:1px solid #0a3d22;
+    display:flex;flex-direction:column;padding:16px;gap:12px;z-index:5}
+  .ttl{font-size:12px;letter-spacing:3px;color:var(--grn-dim);
+    border-bottom:1px solid #0a3d22;padding-bottom:6px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:#020e07;border:1px solid #0a3d22;border-radius:4px;padding:8px 10px}
+  .stat .n{font-size:26px;font-weight:bold;text-shadow:0 0 8px var(--grn-glow)}
+  .stat .n.warn{color:var(--red);text-shadow:0 0 8px #ff2b4788}
+  .stat .l{font-size:10px;color:var(--grn-dim);letter-spacing:1px}
+
+  #list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:5px;padding-right:4px}
+  #list::-webkit-scrollbar{width:6px}
+  #list::-webkit-scrollbar-thumb{background:#0a3d22;border-radius:3px}
+  .net{background:#020e07;border:1px solid #0a3d22;border-left:3px solid var(--grn);
+    border-radius:3px;padding:7px 10px;cursor:pointer;transition:.15s}
+  .net:hover,.net.sel{background:#072b16;border-color:var(--grn)}
+  .net.open{border-left-color:var(--red)}
+  .net .row1{display:flex;justify-content:space-between;font-size:13px}
+  .net .ssid{color:#dfffe9;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px}
+  .net .sig{color:var(--grn)}
+  .net .row2{display:flex;justify-content:space-between;font-size:10px;color:var(--grn-dim);margin-top:3px}
+  .net .lock.open{color:var(--red)}
+
+  .controls{display:flex;flex-direction:column;gap:8px}
+  button{font-family:var(--font);background:#04120a;color:var(--grn);
+    border:1px solid var(--grn);border-radius:4px;padding:9px;cursor:pointer;
+    letter-spacing:1px;font-size:12px;transition:.15s}
+  button:hover{background:var(--grn);color:#000;box-shadow:0 0 12px var(--grn-glow)}
+  button.off{color:var(--grn-dim);border-color:#0a3d22}
+  .btnrow{display:flex;gap:8px}
+  .btnrow button{flex:1}
+  #foot{font-size:10px;color:var(--grn-dim);text-align:center;letter-spacing:1px}
+
+  /* detalle flotante */
+  #detail{position:absolute;bottom:16px;left:16px;z-index:6;min-width:240px;
+    background:#020e07ee;border:1px solid var(--grn);border-radius:5px;padding:12px 14px;
+    display:none;box-shadow:0 0 20px var(--grn-glow);font-size:12px}
+  #detail.show{display:block}
+  #detail h3{font-size:15px;color:#fff;margin-bottom:6px}
+  #detail .kv{display:flex;justify-content:space-between;gap:16px;margin:2px 0}
+  #detail .kv span:first-child{color:var(--grn-dim)}
+  #detail .danger{color:var(--red);font-weight:bold;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <video id="cam" autoplay muted playsinline></video>
+    <canvas id="radar" width="720" height="720"></canvas>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div id="topbar">
+      <div id="brand">radar<b>WIFI</b></div>
+      <div id="mode" class="sim">-- INICIANDO --</div>
+    </div>
+    <div id="detail"></div>
+  </div>
+
+  <div id="panel">
+    <div class="ttl">// PANORAMA</div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="s-total">0</div><div class="l">REDES</div></div>
+      <div class="stat"><div class="n warn" id="s-open">0</div><div class="l">ABIERTAS</div></div>
+      <div class="stat"><div class="n" id="s-24">0</div><div class="l">2.4 GHz</div></div>
+      <div class="stat"><div class="n" id="s-5">0</div><div class="l">5 GHz</div></div>
+    </div>
+    <div class="ttl">// SENALES DETECTADAS</div>
+    <div id="list"></div>
+    <div class="controls">
+      <div class="btnrow">
+        <button id="btn-scan">RE-ESCANEAR</button>
+        <button id="btn-auto" class="off">AUTO: OFF</button>
+      </div>
+      <div class="btnrow">
+        <button id="btn-cam" class="off">CAMARA: OFF</button>
+        <button id="btn-sound" class="off">PING: OFF</button>
+      </div>
+    </div>
+    <div id="foot">100% LOCAL &middot; NADA SALE DE TU PC</div>
+  </div>
+</div>
+
+<script>
+const cv = document.getElementById('radar');
+const ctx = cv.getContext('2d');
+const CX = cv.width/2, CY = cv.height/2, R = 330;
+
+let networks = [];      // datos crudos del backend
+let blips = [];         // objetos con posicion estable
+let selected = null;
+let sweep = 0;          // angulo del barrido (rad)
+let autoTimer = null;
+let soundOn = false, audioCtx = null;
+
+// hash estable BSSID -> angulo (para que cada red no salte de lugar)
+function angleFor(bssid){
+  let h = 0;
+  for(const c of bssid) h = (h*31 + c.charCodeAt(0)) >>> 0;
+  return (h % 3600) / 3600 * Math.PI*2;
+}
+function radiusFor(signal){
+  // senal fuerte = cerca del centro (tu estas al centro)
+  const s = Math.max(5, Math.min(100, signal));
+  return R * (1 - s/100) * 0.92 + 14;
+}
+
+function rebuild(){
+  blips = networks.map(n => {
+    const a = angleFor(n.bssid);
+    const rad = radiusFor(n.signal);
+    return {
+      net:n, a, rad,
+      x: CX + Math.cos(a)*rad,
+      y: CY + Math.sin(a)*rad,
+      lit: 0
+    };
+  });
+}
+
+function ping(){
+  if(!soundOn) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = 720; o.type='sine';
+    g.gain.setValueAtTime(0.001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.15, audioCtx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.25);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime+0.26);
+  }catch(e){}
+}
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  // fondo del disco
+  const grd = ctx.createRadialGradient(CX,CY,0,CX,CY,R);
+  grd.addColorStop(0,'#031a0d'); grd.addColorStop(1,'#010a05');
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(CX,CY,R,0,Math.PI*2); ctx.fill();
+
+  // anillos de rango
+  ctx.strokeStyle='#0a7d3a55'; ctx.lineWidth=1;
+  for(let i=1;i<=4;i++){ ctx.beginPath(); ctx.arc(CX,CY,R*i/4,0,Math.PI*2); ctx.stroke(); }
+  // cruz
+  ctx.beginPath();
+  ctx.moveTo(CX-R,CY); ctx.lineTo(CX+R,CY);
+  ctx.moveTo(CX,CY-R); ctx.lineTo(CX,CY+R); ctx.stroke();
+  // marcas de grados
+  for(let d=0; d<360; d+=30){
+    const a = d*Math.PI/180;
+    ctx.beginPath();
+    ctx.moveTo(CX+Math.cos(a)*(R-10), CY+Math.sin(a)*(R-10));
+    ctx.lineTo(CX+Math.cos(a)*R, CY+Math.sin(a)*R); ctx.stroke();
+  }
+
+  // barrido con estela
+  sweep += 0.018;
+  const span = 0.5;
+  for(let i=0;i<28;i++){
+    const a = sweep - i*0.018;
+    const alpha = (1 - i/28) * 0.22;
+    ctx.strokeStyle = `rgba(0,255,95,${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(CX,CY);
+    ctx.lineTo(CX+Math.cos(a)*R, CY+Math.sin(a)*R); ctx.stroke();
+  }
+  // linea principal del barrido
+  ctx.strokeStyle='#00ff5f'; ctx.lineWidth=2;
+  ctx.shadowColor='#00ff5f'; ctx.shadowBlur=14;
+  ctx.beginPath(); ctx.moveTo(CX,CY);
+  ctx.lineTo(CX+Math.cos(sweep)*R, CY+Math.sin(sweep)*R); ctx.stroke();
+  ctx.shadowBlur=0;
+
+  // blips
+  const norm = ((sweep%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
+  for(const b of blips){
+    let diff = Math.abs(norm - b.a);
+    if(diff>Math.PI) diff = Math.PI*2-diff;
+    if(diff < span){ if(b.lit < 0.2) ping(); b.lit = 1; }   // el barrido lo "ilumina"
+    b.lit *= 0.965;
+
+    const open = b.net.open;
+    const base = open ? '255,43,71' : '0,255,95';
+    const size = 4 + (b.net.signal/100)*6;
+
+    // halo
+    ctx.fillStyle = `rgba(${base},${0.15*b.lit})`;
+    ctx.beginPath(); ctx.arc(b.x,b.y, size+10*b.lit, 0,Math.PI*2); ctx.fill();
+    // punto
+    ctx.fillStyle = `rgba(${base},${0.55+0.45*b.lit})`;
+    ctx.shadowColor = `rgb(${base})`; ctx.shadowBlur = 8*b.lit;
+    ctx.beginPath(); ctx.arc(b.x,b.y,size,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+
+    if(b === selected){
+      ctx.strokeStyle=`rgb(${base})`; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(b.x,b.y,size+7,0,Math.PI*2); ctx.stroke();
+    }
+    // etiqueta si esta iluminado o seleccionado
+    if(b.lit>0.35 || b===selected){
+      ctx.fillStyle=`rgba(${base},${Math.max(0.5,b.lit)})`;
+      ctx.font='11px Consolas';
+      const t = b.net.ssid.length>16 ? b.net.ssid.slice(0,15)+'…' : b.net.ssid;
+      ctx.fillText(t, b.x+size+4, b.y+3);
+    }
+  }
+
+  // punto central (tu)
+  ctx.fillStyle='#dfffe9'; ctx.shadowColor='#fff'; ctx.shadowBlur=10;
+  ctx.beginPath(); ctx.arc(CX,CY,4,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+
+  requestAnimationFrame(draw);
+}
+
+// ---- interaccion: click en blip ----
+cv.addEventListener('click', e=>{
+  const r = cv.getBoundingClientRect();
+  const mx = (e.clientX-r.left)*(cv.width/r.width);
+  const my = (e.clientY-r.top)*(cv.height/r.height);
+  let best=null, bd=1e9;
+  for(const b of blips){
+    const d = Math.hypot(b.x-mx, b.y-my);
+    if(d<bd && d<26){ bd=d; best=b; }
+  }
+  if(best){ selectNet(best); }
+});
+
+function selectNet(b){
+  selected = b;
+  const n = b.net;
+  const d = document.getElementById('detail');
+  d.className='show';
+  d.innerHTML = `<h3>${escapeHtml(n.ssid)}</h3>
+    <div class="kv"><span>BSSID</span><span>${n.bssid}</span></div>
+    <div class="kv"><span>Senal</span><span>${n.signal}%</span></div>
+    <div class="kv"><span>Canal</span><span>${n.channel ?? '?'} &middot; ${n.band}</span></div>
+    <div class="kv"><span>Radio</span><span>${escapeHtml(n.radio)}</span></div>
+    <div class="kv"><span>Seguridad</span><span>${escapeHtml(n.auth)} / ${escapeHtml(n.enc)}</span></div>
+    ${n.open ? '<div class="danger">⚠ RED ABIERTA — sin cifrado</div>' : ''}`;
+  // resalta en lista
+  document.querySelectorAll('.net').forEach(el=>el.classList.toggle('sel', el.dataset.bssid===n.bssid));
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// ---- render del panel ----
+function renderPanel(){
+  const total = networks.length;
+  const open = networks.filter(n=>n.open).length;
+  const g24 = networks.filter(n=>n.band==='2.4 GHz').length;
+  const g5 = networks.filter(n=>n.band==='5 GHz').length;
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-open').textContent = open;
+  document.getElementById('s-24').textContent = g24;
+  document.getElementById('s-5').textContent = g5;
+
+  const list = document.getElementById('list');
+  list.innerHTML='';
+  for(const n of networks){
+    const el = document.createElement('div');
+    el.className = 'net'+(n.open?' open':'');
+    el.dataset.bssid = n.bssid;
+    const bars = n.signal>=66?'▮▮▮':n.signal>=33?'▮▮▯':'▮▯▯';
+    el.innerHTML = `<div class="row1"><span class="ssid">${escapeHtml(n.ssid)}</span>
+      <span class="sig">${n.signal}% ${bars}</span></div>
+      <div class="row2"><span>ch ${n.channel ?? '?'} &middot; ${n.band}</span>
+      <span class="lock ${n.open?'open':''}">${n.open?'🔓 ABIERTA':'🔒 '+escapeHtml(n.auth)}</span></div>`;
+    el.addEventListener('click', ()=>{
+      const b = blips.find(x=>x.net.bssid===n.bssid);
+      if(b) selectNet(b);
+    });
+    list.appendChild(el);
+  }
+}
+
+// ---- fetch al backend ----
+async function scan(){
+  const btn = document.getElementById('btn-scan');
+  btn.textContent='ESCANEANDO...';
+  try{
+    const r = await fetch('/api/scan');
+    const j = await r.json();
+    networks = j.networks;
+    const m = document.getElementById('mode');
+    if(j.mode==='EN VIVO'){ m.textContent='● EN VIVO'; m.className='live'; }
+    else { m.textContent='◆ SIMULACION'; m.className='sim'; }
+    rebuild();
+    renderPanel();
+  }catch(e){
+    document.getElementById('mode').textContent='✕ ERROR';
+  }
+  btn.textContent='RE-ESCANEAR';
+}
+
+// ---- controles ----
+document.getElementById('btn-scan').onclick = scan;
+
+document.getElementById('btn-auto').onclick = e=>{
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; e.target.className='off'; e.target.textContent='AUTO: OFF'; }
+  else { autoTimer=setInterval(scan, 6000); e.target.className=''; e.target.textContent='AUTO: ON'; scan(); }
+};
+
+document.getElementById('btn-sound').onclick = e=>{
+  soundOn=!soundOn;
+  e.target.className = soundOn?'':'off';
+  e.target.textContent = 'PING: '+(soundOn?'ON':'OFF');
+};
+
+document.getElementById('btn-cam').onclick = async e=>{
+  const cam = document.getElementById('cam');
+  if(cam.classList.contains('on')){
+    cam.classList.remove('on');
+    if(cam.srcObject){ cam.srcObject.getTracks().forEach(t=>t.stop()); cam.srcObject=null; }
+    e.target.className='off'; e.target.textContent='CAMARA: OFF';
+  } else {
+    try{
+      cam.srcObject = await navigator.mediaDevices.getUserMedia({video:true});
+      cam.classList.add('on');
+      e.target.className=''; e.target.textContent='CAMARA: ON';
+    }catch(err){ alert('No se pudo abrir la camara: '+err.message); }
+  }
+};
+
+draw();
+scan();
+</script>
+</body>
+</html>
